@@ -62,7 +62,7 @@ session_start(); // Start the session to access session variables
         <nav>
             <div class="nav-links">
                 <a href="#" class="nav-link active">Home</a>
-                <a href="categories.php" class="nav-link">Products</a>
+                <a href="shop.php" class="nav-link">Products</a>
                 <a href="about.php" class="nav-link">Cities</a>
                 <a href="about.php" class="nav-link">About</a>
             </div>
