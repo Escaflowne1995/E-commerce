@@ -9,9 +9,9 @@ if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
 }
 
 // Sync session cart with database
-$sql = "SELECT c.product_id, c.quantity, p.name, p.description, p.price, p.image 
-        FROM cart c 
-        JOIN products p ON c.product_id = p.id 
+$sql = "SELECT c.product_id, c.quantity, p.name, p.description, p.price, p.image
+        FROM cart c
+        JOIN products p ON c.product_id = p.id
         WHERE c.user_id = ?";
 $stmt = mysqli_prepare($conn, $sql);
 mysqli_stmt_bind_param($stmt, "i", $_SESSION['id']);
@@ -69,64 +69,87 @@ foreach ($_SESSION['cart'] as $item) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ArtSell - Your Cart</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
     <style>
-        /* Your existing styles remain unchanged */
-        body { background-color: #f9f9f9; color: #333; font-family: 'Open Sans', sans-serif; }
+        /* Modern cart styles */
+        body { background-color: #f8f9fa; color: #333; font-family: 'Poppins', 'Inter', sans-serif; line-height: 1.6; }
         .container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
-        header { background: #fff; padding: 15px 0; border-bottom: 1px solid #eee; }
+        header { background: #fff; padding: 15px 0; box-shadow: 0 2px 15px rgba(0, 0, 0, 0.08); position: fixed; top: 0; left: 0; width: 100%; z-index: 1000; }
         .header-inner { display: flex; justify-content: space-between; align-items: center; }
-        .logo a { color: #ff6b00; text-decoration: none; font-size: 20px; font-weight: bold; }
+        .logo a { color: #5048E5; text-decoration: none; font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+        .logo a span { color: #333; font-weight: 600; }
         nav ul { display: flex; list-style: none; }
-        nav ul li { margin-left: 25px; }
-        nav ul li a { color: #333; text-decoration: none; font-weight: 500; }
+        nav ul li { margin-left: 30px; }
+        nav ul li a { color: #333; text-decoration: none; font-weight: 500; transition: color 0.3s ease; }
+        nav ul li a:hover { color: #5048E5; }
         .profile-dropdown { position: relative; }
-        .profile-dropdown:hover .dropdown-content { display: block; }
-        .dropdown-content { position: absolute; right: 0; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-radius: 4px; min-width: 120px; }
-        .dropdown-content a { display: block; padding: 10px 15px; color: #333; text-decoration: none; }
-        .dropdown-content a:hover { background: #f5f5f5; }
-        .cart-container { padding: 30px 0; }
-        h1 { font-size: 24px; font-weight: 600; margin-bottom: 20px; color: #333; }
-        .cart-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .cart-table th, .cart-table td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; }
-        .cart-table th { background: #f5f5f5; font-weight: 600; color: #555; }
-        .cart-table img { width: 80px; height: 80px; object-fit: cover; border-radius: 4px; margin-right: 10px; }
-        .cart-table input[type="number"] { width: 60px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
-        .remove-btn { background: #ff6b00; color: white; border: none; padding: 10px; border-radius: 4px; cursor: pointer; transition: background 0.3s ease; }
-        .remove-btn:hover { background: #e65c00; }
-        .cart-total { text-align: right; font-size: 18px; font-weight: 600; margin-bottom: 20px; color: #333; }
-        .button-container { display: flex; gap: 10px; justify-content: center; }
-        .add-to-cart, .checkout-btn { flex: 1; padding: 10px; border: none; border-radius: 4px; cursor: pointer; text-align: center; max-width: 200px; }
-        .add-to-cart { background: #3b5998; color: white; }
-        .checkout-btn { background: #ff6b00; color: white; }
-        .add-to-cart:hover { background: #2a4373; }
-        .checkout-btn:hover { background: #e65c00; }
-        .empty-cart { text-align: center; padding: 40px; background: #fff; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .empty-cart a { color: #ff6b00; text-decoration: none; font-weight: 500; }
-        .empty-cart a:hover { text-decoration: underline; }
-        footer { background: #2c3e50; color: white; padding: 40px 0 20px; }
-        .footer-content { display: flex; justify-content: space-between; }
-        .footer-column { flex: 1; padding: 0 15px; }
-        .footer-logo { color: #ff6b00; font-size: 20px; font-weight: bold; }
-        .newsletter input { padding: 8px; width: 70%; border: none; border-radius: 4px 0 0 4px; }
-        .newsletter button { padding: 8px; background: #ff6b00; color: white; border: none; border-radius: 0 4px 4px 0; }
-        .footer-column h3 { font-size: 16px; margin-bottom: 10px; }
-        .footer-column ul { list-style: none; }
-        .footer-column ul li { margin-bottom: 8px; }
-        .footer-column ul li a { color: white; text-decoration: none; }
-        .footer-column ul li a:hover { color: #ff6b00; }
+        .profile-dropdown:hover .dropdown-content { display: block; opacity: 1; transform: translateY(0); }
+        .dropdown-content { position: absolute; right: 0; background: #fff; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); border-radius: 8px; min-width: 180px; padding: 8px 0; display: none; opacity: 0; transform: translateY(-10px); transition: opacity 0.3s, transform 0.3s; }
+        .dropdown-content a { display: block; padding: 12px 20px; color: #333; text-decoration: none; font-size: 14px; transition: all 0.2s ease; }
+        .dropdown-content a:hover { background: #f5f5f5; color: #5048E5; }
+        .cart-container { padding: 100px 0 50px; }
+        h1 { font-size: 32px; font-weight: 700; margin-bottom: 30px; color: #111; }
+        .cart-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05); margin-bottom: 30px; overflow: hidden; }
+        .cart-table th, .cart-table td { padding: 20px; text-align: left; border-bottom: 1px solid #eee; }
+        .cart-table th { background: #f5f5f5; font-weight: 600; color: #333; }
+        .cart-table img { width: 80px; height: 80px; object-fit: cover; border-radius: 8px; margin-right: 15px; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1); }
+        .cart-table input[type="number"] { width: 70px; padding: 10px; border: 1px solid #e0e0e0; border-radius: 8px; font-family: 'Inter', sans-serif; transition: all 0.3s ease; }
+        .cart-table input[type="number"]:focus { border-color: #5048E5; box-shadow: 0 0 0 3px rgba(80, 72, 229, 0.1); outline: none; }
+        .remove-btn { background: #e53e3e; color: white; border: none; padding: 10px 16px; border-radius: 8px; cursor: pointer; transition: all 0.3s ease; font-weight: 500; }
+        .remove-btn:hover { background: #c53030; transform: translateY(-2px); box-shadow: 0 5px 10px rgba(229, 62, 62, 0.2); }
+        .cart-total { text-align: right; font-size: 24px; font-weight: 700; margin: 30px 0; color: #111; }
+        .button-container { display: flex; gap: 20px; justify-content: flex-end; margin-top: 30px; }
+        .update-cart, .checkout-btn { padding: 14px 30px; border: none; border-radius: 8px; cursor: pointer; text-align: center; font-weight: 600; transition: all 0.3s ease; font-size: 16px; }
+        .update-cart { background: #f5f5f5; color: #333; }
+        .checkout-btn { background: #5048E5; color: white; }
+        .update-cart:hover { background: #e0e0e0; transform: translateY(-2px); }
+        .checkout-btn:hover { background: #3c34c2; transform: translateY(-2px); box-shadow: 0 8px 15px rgba(80, 72, 229, 0.25); }
+        .empty-cart { text-align: center; padding: 60px; background: #fff; border-radius: 12px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05); }
+        .empty-cart h2 { font-size: 24px; font-weight: 600; margin-bottom: 20px; color: #111; }
+        .empty-cart p { margin-bottom: 30px; color: #666; }
+        .empty-cart a { color: #5048E5; text-decoration: none; font-weight: 600; display: inline-block; padding: 12px 25px; background-color: #f0f0ff; border-radius: 8px; transition: all 0.3s ease; }
+        .empty-cart a:hover { background-color: #5048E5; color: white; transform: translateY(-3px); box-shadow: 0 8px 15px rgba(80, 72, 229, 0.25); }
 
+        /* Footer styling */
+        footer { background-color: #1A1A2E; color: white; padding: 80px 0 20px; }
+        .footer-content { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 40px; margin-bottom: 40px; }
+        .footer-column { }
+        .footer-column h3 { font-size: 18px; margin-bottom: 20px; font-weight: 600; }
+        .footer-logo { color: #5048E5; font-size: 24px; font-weight: 700; text-decoration: none; display: inline-block; margin-bottom: 15px; }
+        .footer-links { list-style: none; padding: 0; }
+        .footer-links li { margin-bottom: 12px; }
+        .footer-links a { color: rgba(255, 255, 255, 0.7); text-decoration: none; font-size: 14px; transition: color 0.3s; }
+        .footer-links a:hover { color: #fff; }
+        .footer-bottom { text-align: center; padding-top: 30px; border-top: 1px solid rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.5); font-size: 14px; }
+
+        /* Profile link styling */
         .profile-link {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-    .profile-pic {
-        width: 30px;
-        height: 30px;
-        border-radius: 50%;
-        object-fit: cover;
-    }
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.3s ease;
+        }
+        .profile-link:hover {
+            opacity: 0.85;
+        }
+        .profile-pic {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .cart-table { display: block; overflow-x: auto; }
+            .button-container { flex-direction: column; align-items: center; }
+            .update-cart, .checkout-btn { width: 100%; }
+        }
     </style>
 </head>
 <body>
@@ -203,8 +226,8 @@ foreach ($_SESSION['cart'] as $item) {
                     Total: ₱<?php echo number_format($total, 2); ?>
                 </div>
                 <div class="button-container">
-                    <button type="submit" name="update_cart" class="add-to-cart">Update Cart</button>
-                    <a href="checkout.php" class="checkout-btn">Checkout</a>       
+                    <button type="submit" name="update_cart" class="update-cart">Update Cart</button>
+                    <a href="checkout.php" class="checkout-btn">Checkout</a>
                 </div>
             </form>
         <?php else: ?>
