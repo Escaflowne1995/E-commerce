@@ -119,6 +119,9 @@ $paginated_products = array_slice($products, $offset, $items_per_page);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ArtSell - Cebu Cultural Marketplace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
     <style>
         body { background-color: #f9f9f9; color: #333; font-family: 'Open Sans', sans-serif; }
@@ -167,7 +170,7 @@ $paginated_products = array_slice($products, $offset, $items_per_page);
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); justify-content: center; align-items: center; }
         .modal-content { max-width: 90%; max-height: 90%; border-radius: 6px; }
         .close { position: absolute; top: 20px; right: 30px; color: white; font-size: 40px; font-weight: bold; cursor: pointer; }
-       
+
         .profile-link {
             display: flex;
             align-items: center;
