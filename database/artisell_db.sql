@@ -168,18 +168,20 @@ CREATE TABLE `users` (
   `password` varchar(255) NOT NULL,
   `role` enum('admin','customer','vendor') NOT NULL DEFAULT 'customer',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `profile_picture` varchar(255) DEFAULT 'images/default-profile.jpg'
+  `profile_picture` varchar(255) DEFAULT 'images/default-profile.jpg',
+  `password_change_required` tinyint(1) NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `username`, `email`, `password`, `role`, `created_at`, `profile_picture`) VALUES
-(1, 'customer', 'customer@gmail.com', '$2y$10$cQOZKMk1zJGmU81.l/roaOaxzjnbjhcey44CewVnJ2jUbBIfS9z5a', 'customer', '2025-03-15 11:41:44', 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRFY-riF9R3NABfKyL8aJ9mjtzbTlPiEmqLaA&s'),
-(2, 'vendor', 'vendor@gmail.com', '$2y$10$75IfGrYHRTwmWXCBTyQyNe0zfe228OrHtsT2a8EJvbGpzch6h25t2', 'vendor', '2025-03-19 12:42:01', 'https://cdn-images.dzcdn.net/images/cover/83843448ffbeed9acb8c52d1365b0c4d/0x1900-000000-80-0-0.jpg'),
-(3, 'Admin', 'admin@gmail.com', '$2y$10$d08bs5N.mbettz82Z5FbCeVstV98oxZA6oyN0un7qPhpZiDavqRZ.', 'customer', '2025-04-02 13:52:17', 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQhvCCckDla7UC8gQ0FBOfUp1H7n9Y0hqeI4Q&s'),
-(4, 'vendor1', 'vendor1@gmail.com', '$2y$10$7W6wZP29J10SFGWPzxEmcOtPFiyZZKTxJ/j6qhhVpR7yVwY/HLeiS', 'vendor', '2025-04-03 14:19:54', 'https://media.istockphoto.com/id/1206907529/photo/burrow-with-the-view-from-the-hole-towards-the-sky-as-a-special-symbol-for-planting-mouse.jpg?s=612x612&w=0&k=20&c=bDIcTOPGqo13A23qrMBgClLVnDnXnbL7mWV3XYKbIv0=');
+INSERT INTO `users` (`id`, `username`, `email`, `password`, `role`, `created_at`, `profile_picture`, `password_change_required`) VALUES
+(1, 'customer', 'customer@gmail.com', '$2y$10$cQOZKMk1zJGmU81.l/roaOaxzjnbjhcey44CewVnJ2jUbBIfS9z5a', 'customer', '2025-03-15 11:41:44', 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRFY-riF9R3NABfKyL8aJ9mjtzbTlPiEmqLaA&s', 0),
+(2, 'vendor', 'vendor@gmail.com', '$2y$10$75IfGrYHRTwmWXCBTyQyNe0zfe228OrHtsT2a8EJvbGpzch6h25t2', 'vendor', '2025-03-19 12:42:01', 'https://cdn-images.dzcdn.net/images/cover/83843448ffbeed9acb8c52d1365b0c4d/0x1900-000000-80-0-0.jpg', 0),
+(3, 'Admin', 'admin@gmail.com', '$2y$10$d08bs5N.mbettz82Z5FbCeVstV98oxZA6oyN0un7qPhpZiDavqRZ.', 'customer', '2025-04-02 13:52:17', 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQhvCCckDla7UC8gQ0FBOfUp1H7n9Y0hqeI4Q&s', 0),
+(4, 'vendor1', 'vendor1@gmail.com', '$2y$10$7W6wZP29J10SFGWPzxEmcOtPFiyZZKTxJ/j6qhhVpR7yVwY/HLeiS', 'vendor', '2025-04-03 14:19:54', 'https://media.istockphoto.com/id/1206907529/photo/burrow-with-the-view-from-the-hole-towards-the-sky-as-a-special-symbol-for-planting-mouse.jpg?s=612x612&w=0&k=20&c=bDIcTOPGqo13A23qrMBgClLVnDnXnbL7mWV3XYKbIv0=', 0),
+(5, 'defaultadmin', 'admin@artisell.com', '$2y$10$v0uaFl5hvJ/EteK.8fRCpOkZA4No7XnEkAS3opEldTMxN/Pp1yF2S', 'admin', CURRENT_TIMESTAMP, 'images/default-profile.jpg', 1);
 
 --
 -- Indexes for dumped tables
@@ -253,7 +255,7 @@ ALTER TABLE `products`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- Constraints for dumped tables

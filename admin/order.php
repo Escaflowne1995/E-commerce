@@ -1,166 +1,446 @@
+<?php
+session_start();
+require_once '../db_connection.php';
+
+// Check if user is logged in and is an admin
+if (!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true || $_SESSION["role"] !== 'admin') {
+    header("location: ../login.php"); // Redirect to login page if not logged in or not an admin
+    exit;
+}
+
+// Handle database connection error
+if (!$conn) {
+    $error_message = $error_message ?? "Database connection failed. Please try again later.";
+}
+
+// Initialize variables
+$success_message = '';
+$error_message = $error_message ?? '';
+
+// Handle status update if form submitted
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['order_id']) && isset($_POST['status'])) {
+    $orderId = filter_input(INPUT_POST, 'order_id', FILTER_VALIDATE_INT);
+    $newStatus = filter_input(INPUT_POST, 'status', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+
+    if ($orderId && in_array($newStatus, ['pending', 'processing', 'shipped', 'delivered', 'cancelled'])) {
+        // Capitalize first letter of status for display
+        $displayStatus = ucfirst($newStatus);
+
+        try {
+            $sql = "UPDATE orders SET status = ? WHERE id = ?";
+            $stmt = mysqli_prepare($conn, $sql);
+            mysqli_stmt_bind_param($stmt, "si", $displayStatus, $orderId);
+
+            if (mysqli_stmt_execute($stmt)) {
+                $success_message = "Order status updated successfully!";
+            } else {
+                $error_message = "Error updating order status: " . mysqli_error($conn);
+            }
+            mysqli_stmt_close($stmt);
+        } catch (Exception $e) {
+            $error_message = "Database error: " . $e->getMessage();
+        }
+    } else {
+        $error_message = "Invalid input data";
+    }
+}
+
+// Initialize arrays for orders and stats
+$orders = [];
+$total_orders = 0;
+$pending_orders = 0;
+$processing_orders = 0;
+$shipped_orders = 0;
+$delivered_orders = 0;
+$cancelled_orders = 0;
+
+// Only proceed with database operations if connection is valid
+if ($conn) {
+    // Get filter values
+    $status = isset($_GET['status']) ? trim($_GET['status']) : '';
+    $search = isset($_GET['search']) ? trim($_GET['search']) : '';
+
+    // Build query with possible filters
+    $sqlQuery = "SELECT o.*, u.username, u.email as user_email
+                FROM orders o
+                LEFT JOIN users u ON o.user_id = u.id
+                WHERE 1=1";
+    $queryParams = [];
+
+    if (!empty($status)) {
+        $sqlQuery .= " AND o.status = ?";
+        $queryParams[] = $status;
+    }
+
+    if (!empty($search)) {
+        $sqlQuery .= " AND (u.username LIKE ? OR o.shipping_name LIKE ? OR o.id LIKE ?)";
+        $searchParam = "%{$search}%";
+        $queryParams[] = $searchParam;
+        $queryParams[] = $searchParam;
+        $queryParams[] = $searchParam;
+    }
+
+    $sqlQuery .= " ORDER BY o.created_at DESC";
+
+    // Prepare and execute statement
+    try {
+        $stmt = mysqli_prepare($conn, $sqlQuery);
+
+        if ($stmt) {
+            if (!empty($queryParams)) {
+                $types = str_repeat("s", count($queryParams));
+                mysqli_stmt_bind_param($stmt, $types, ...$queryParams);
+            }
+
+            if (mysqli_stmt_execute($stmt)) {
+                $result = mysqli_stmt_get_result($stmt);
+                if ($result) {
+                    while ($row = mysqli_fetch_assoc($result)) {
+                        $orders[] = $row;
+                    }
+                    mysqli_free_result($result);
+                }
+            }
+            mysqli_stmt_close($stmt);
+        }
+    } catch (Exception $e) {
+        $error_message = "Error fetching orders: " . $e->getMessage();
+    }
+
+    // Get order statistics
+    try {
+        $statsQuery = "SELECT status, COUNT(*) as count FROM orders GROUP BY status";
+        $statsResult = mysqli_query($conn, $statsQuery);
+        if ($statsResult) {
+            while ($row = mysqli_fetch_assoc($statsResult)) {
+                $status = strtolower($row['status']);
+                $count = $row['count'];
+                $total_orders += $count;
+
+                if ($status === 'pending') {
+                    $pending_orders = $count;
+                } elseif ($status === 'processing') {
+                    $processing_orders = $count;
+                } elseif ($status === 'shipped') {
+                    $shipped_orders = $count;
+                } elseif ($status === 'delivered') {
+                    $delivered_orders = $count;
+                } elseif ($status === 'cancelled') {
+                    $cancelled_orders = $count;
+                }
+            }
+            mysqli_free_result($statsResult);
+        }
+    } catch (Exception $e) {
+        // If stats fail, don't show an error, just display zeros
+    }
+}
+?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Orders - Artisell Dashboard</title>
+  <title>Orders Management - Admin Dashboard</title>
   <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/orders.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 </head>
 <body>
-  <div class="dashboard">
-    <aside class="sidebar">
-      <div class="sidebar-header">
-        <h1 class="logo">ARTISELL</h1>
-        <div class="menu-icon">
-          <svg width="28" height="24" viewBox="0 0 28 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2.61 0H25.041C25.7332 0 26.3971 0.274981 26.8865 0.764451C27.376 1.25392 27.651 1.91778 27.651 2.61C27.651 3.30221 27.376 3.96608 26.8865 4.45555C26.3971 4.94502 25.7332 5.22 25.041 5.22H2.61C1.91778 5.22 1.25392 4.94502 0.764451 4.45555C0.274981 3.96608 7.77841e-08 3.30221 7.77841e-08 2.61C7.77841e-08 1.91778 0.274981 1.25392 0.764451 0.764451C1.25392 0.274981 1.91778 0 2.61 0ZM2.61 9.39H25.041C25.3838 9.39 25.7231 9.45751 26.0398 9.58867C26.3565 9.71984 26.6442 9.91209 26.8865 10.1545C27.1289 10.3968 27.3212 10.6845 27.4523 11.0012C27.5835 11.3179 27.651 11.6572 27.651 12C27.651 12.3428 27.5835 12.6821 27.4523 12.9988C27.3212 13.3155 27.1289 13.6032 26.8865 13.8455C26.6442 14.0879 26.3565 14.2802 26.0398 14.4113C25.7231 14.5425 25.3838 14.61 25.041 14.61H2.61C2.26725 14.61 1.92786 14.5425 1.6112 14.4113C1.29454 14.2802 1.00681 14.0879 0.764451 13.8455C0.52209 13.6032 0.329839 13.3155 0.198674 12.9988C0.0675097 12.6821 2.27824e-08 12.3428 2.27824e-08 12C2.27824e-08 11.6572 0.0675097 11.3179 0.198674 11.0012C0.329839 10.6845 0.52209 10.3968 0.764451 10.1545C1.00681 9.91209 1.29454 9.71984 1.6112 9.58867C1.92786 9.45751 2.26725 9.39 2.61 9.39ZM2.61 18.781H25.041C25.3838 18.781 25.7231 18.8485 26.0398 18.9797C26.3565 19.1108 26.6442 19.3031 26.8865 19.5455C27.1289 19.7878 27.3212 20.0755 27.4523 20.3922C27.5835 20.7089 27.651 21.0483 27.651 21.391C27.651 21.7338 27.5835 22.0731 27.4523 22.3898C27.3212 22.7065 27.1289 22.9942 26.8865 23.2365C26.6442 23.4789 26.3565 23.6712 26.0398 23.8023C25.7231 23.9335 25.3838 24.001 25.041 24.001H2.61C2.26725 24.001 1.92786 23.9335 1.6112 23.8023C1.29454 23.6712 1.00681 23.4789 0.764451 23.2365C0.52209 22.9942 0.329839 22.7065 0.198674 22.3898C0.0675096 22.0731 0 21.7338 0 21.391C0 21.0483 0.0675096 20.7089 0.198674 20.3922C0.329839 20.0755 0.52209 19.7878 0.764451 19.5455C1.00681 19.3031 1.29454 19.1108 1.6112 18.9797C1.92786 18.8485 2.26725 18.781 2.61 18.781Z" fill="currentColor"/>
-          </svg>
+  <div class="container">
+    <div class="sidebar">
+      <div class="logo">
+        <h2>ARTISELL</h2>
+      </div>
+      <div class="admin-profile">
+        <div class="profile-image">
+          <i class="fas fa-user-circle"></i>
+        </div>
+        <div class="profile-details">
+          <span class="profile-label">admin profile</span>
+          <span class="profile-name"><?php echo isset($_SESSION['user_name']) ? htmlspecialchars($_SESSION['user_name']) : 'defaultadmin'; ?></span>
+        </div>
+      </div>
+      <ul class="nav">
+        <li><a href="index.php"><i class="fas fa-home"></i> Home</a></li>
+        <li><a href="user.php"><i class="fas fa-users"></i> Users</a></li>
+        <li><a href="order.php" class="active"><i class="fas fa-shopping-cart"></i> Orders</a></li>
+        <li><a href="product.php"><i class="fas fa-box"></i> Products</a></li>
+        <li><a href="category.php"><i class="fas fa-list"></i> Categories</a></li>
+        <li><a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+      </ul>
+    </div>
+
+    <div class="main">
+      <div class="header">
+        <div class="toggle-menu">
+          <i class="fas fa-bars"></i>
+        </div>
+        <div class="header-content">
+          <div class="profile">
+            <?php if (isset($_SESSION['user_name'])): ?>
+              <span class="user-name"><?php echo htmlspecialchars($_SESSION['user_name']); ?></span>
+            <?php endif; ?>
+            <a href="../index.php" class="home-link"><i class="fas fa-globe"></i> View Website</a>
+          </div>
         </div>
       </div>
 
-      <div class="profile">
-        <div class="profile-image"></div>
-        <div class="profile-role">admin profile</div>
-        <div class="profile-name">admin name</div>
-      </div>
-
-      <nav class="navigation">
-        <a href="index.html" class="nav-link">
-          <div class="nav-icon">
-            <svg width="26" height="30" viewBox="0 0 26 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M0 28.05V11.1011C0 10.6019 0.106476 10.1293 0.319428 9.68346C0.532381 9.23757 0.825809 8.87033 1.19971 8.58174L11.2004 0.629835C11.7241 0.209946 12.3221 0 12.9944 0C13.6667 0 14.2684 0.209946 14.7996 0.629835L24.8003 8.57979C25.1754 8.86838 25.4689 9.23627 25.6806 9.68346C25.8935 10.1293 26 10.6019 26 11.1011V28.05C26 28.5726 25.8149 29.0283 25.4447 29.417C25.0745 29.8057 24.6406 30 24.1429 30H17.8583C17.4324 30 17.0758 29.8492 16.7886 29.5476C16.5013 29.2447 16.3577 28.8703 16.3577 28.4244V19.1251C16.3577 18.6792 16.2141 18.3055 15.9269 18.0039C15.6384 17.701 15.2818 17.5496 14.8571 17.5496H11.1429C10.7182 17.5496 10.3622 17.701 10.075 18.0039C9.78652 18.3055 9.64229 18.6792 9.64229 19.1251V28.4264C9.64229 28.8723 9.49867 29.246 9.21143 29.5476C8.92419 29.8492 8.56824 30 8.14357 30H1.85714C1.35943 30 0.925476 29.8057 0.555285 29.417C0.185095 29.0283 0 28.5726 0 28.05Z" fill="currentColor"/>
-            </svg>
+      <div class="main-content">
+        <div class="page-header">
+          <div class="page-header-content">
+            <h1>Orders Management</h1>
+            <p>View and manage customer orders</p>
           </div>
-          <span class="nav-text">Home</span>
-        </a>
-        <a href="users.html" class="nav-link">
-          <div class="nav-icon">
-            <svg width="46" height="46" viewBox="0 0 46 46" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M22.9998 7.66666C25.0332 7.66666 26.9832 8.47439 28.421 9.91217C29.8588 11.3499 30.6665 13.3 30.6665 15.3333C30.6665 17.3666 29.8588 19.3167 28.421 20.7545C26.9832 22.1923 25.0332 23 22.9998 23C20.9665 23 19.0165 22.1923 17.5787 20.7545C16.1409 19.3167 15.3332 17.3666 15.3332 15.3333C15.3332 13.3 16.1409 11.3499 17.5787 9.91217C19.0165 8.47439 20.9665 7.66666 22.9998 7.66666ZM22.9998 26.8333C31.4715 26.8333 38.3332 30.2642 38.3332 34.5V38.3333H7.6665V34.5C7.6665 30.2642 14.5282 26.8333 22.9998 26.8333Z" fill="currentColor"/>
-            </svg>
+          <div class="db-connection-status">
+            <?php if ($conn): ?>
+              <span class="status-dot status-connected" title="Database Connected"></span>
+              <span class="status-text">DB Connected</span>
+            <?php else: ?>
+              <span class="status-dot status-disconnected" title="Database Disconnected"></span>
+              <span class="status-text">DB Disconnected</span>
+            <?php endif; ?>
           </div>
-          <span class="nav-text">Users</span>
-        </a>
-        <a href="orders.html" class="nav-link active">
-          <div class="nav-icon">
-            <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M6.6665 33.3333V11.8333L3.4165 4.75001L6.4165 3.33334L10.3332 11.75H29.6665L33.5832 3.33334L36.5832 4.75001L33.3332 11.8333V33.3333H6.6665ZM16.6665 21.6667H23.3332C23.8054 21.6667 24.2015 21.5067 24.5215 21.1867C24.8415 20.8667 25.0009 20.4711 24.9998 20C24.9987 19.5289 24.8387 19.1333 24.5198 18.8133C24.2009 18.4933 23.8054 18.3333 23.3332 18.3333H16.6665C16.1943 18.3333 15.7987 18.4933 15.4798 18.8133C15.1609 19.1333 15.0009 19.5289 14.9998 20C14.9987 20.4711 15.1587 20.8672 15.4798 21.1883C15.8009 21.5095 16.1965 21.6689 16.6665 21.6667Z" fill="currentColor"/>
-            </svg>
-          </div>
-          <span class="nav-text">Orders</span>
-        </a>
-        <a href="products.html" class="nav-link">
-          <div class="nav-icon">
-            <svg width="37" height="37" viewBox="0 0 37 37" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M33.9168 10.7916L18.5002 3.08331L3.0835 10.7916V26.2083L18.5002 33.9166L33.9168 26.2083V10.7916Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
-              <path d="M3.0835 10.7916L18.5002 18.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M18.5 33.9167V18.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M33.9167 10.7916L18.5 18.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M26.2087 6.9375L10.792 14.6458" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </div>
-          <span class="nav-text">Products</span>
-        </a>
-        <a href="accounts.html" class="nav-link">
-          <div class="nav-icon">
-            <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M15 6C13.4087 6 11.8826 6.63214 10.7574 7.75736C9.63214 8.88258 9 10.4087 9 12C9 13.5913 9.63214 15.1174 10.7574 16.2426C11.8826 17.3679 13.4087 18 15 18C16.5913 18 18.1174 17.3679 19.2426 16.2426C20.3679 15.1174 21 13.5913 21 12C21 10.4087 20.3679 8.88258 19.2426 7.75736C18.1174 6.63214 16.5913 6 15 6ZM15 9C15.7956 9 16.5587 9.31607 17.1213 9.87868C17.6839 10.4413 18 11.2044 18 12C18 12.7956 17.6839 13.5587 17.1213 14.1213C16.5587 14.6839 15.7956 15 15 15C14.2044 15 13.4413 14.6839 12.8787 14.1213C12.3161 13.5587 12 12.7956 12 12C12 11.2044 12.3161 10.4413 12.8787 9.87868C13.4413 9.31607 14.2044 9 15 9ZM25.5 18C25.26 18 25.14 18.12 25.14 18.36L24.75 20.25C24.42 20.52 23.94 20.76 23.58 21L21.66 20.25C21.54 20.25 21.3 20.25 21.18 20.4L19.74 23.04C19.62 23.16 19.62 23.4 19.86 23.52L21.42 24.75V26.25L19.86 27.48C19.74 27.6 19.62 27.84 19.74 27.96L21.18 30.6C21.3 30.75 21.54 30.75 21.66 30.75L23.58 30C23.94 30.24 24.42 30.48 24.75 30.75L25.14 32.64C25.14 32.88 25.26 33 25.5 33H28.5C28.62 33 28.86 32.88 28.86 32.64L29.1 30.75C29.58 30.48 30.06 30.24 30.42 30L32.25 30.75C32.46 30.75 32.7 30.75 32.7 30.6L34.26 27.96C34.38 27.84 34.26 27.6 34.14 27.48L32.58 26.25V24.75L34.14 23.52C34.26 23.4 34.38 23.16 34.26 23.04L32.7 20.4C32.7 20.25 32.46 20.25 32.25 20.25L30.42 21C30.06 20.76 29.58 20.52 29.1 20.25L28.86 18.36C28.86 18.12 28.62 18 28.5 18H25.5ZM15 19.5C10.995 19.5 3 21.495 3 25.5V30H17.505C17.085 29.115 16.785 28.155 16.635 27.15H5.85V25.5C5.85 24.54 10.545 22.35 15 22.35C15.645 22.35 16.305 22.41 16.95 22.5C17.25 21.54 17.655 20.64 18.18 19.815C17.01 19.62 15.9 19.5 15 19.5ZM27.06 23.25C28.26 23.25 29.25 24.24 29.25 25.56C29.25 26.76 28.26 27.75 27.06 27.75C25.74 27.75 24.75 26.76 24.75 25.56C24.75 24.24 25.74 23.25 27.06 23.25Z" fill="currentColor"/>
-            </svg>
-          </div>
-          <span class="nav-text">Accounts</span>
-        </a>
-      </nav>
-    </aside>
-
-    <main class="main-content">
-      <div class="page-header">
-        <div class="page-header-content">
-          <h1>Orders</h1>
-          <p>Manage your customer orders</p>
         </div>
-        <div class="page-header-actions">
-          <button class="button">Export Orders</button>
+
+        <?php if (!$conn): ?>
+          <div class="message message-error">
+            Error fetching orders: Unknown column 'first_name' in 'field list'
+          </div>
+        <?php endif; ?>
+
+        <?php if (!empty($success_message)): ?>
+          <div class="message message-success">
+            <?php echo $success_message; ?>
+            <button id="applyChangesBtn" class="button button-primary" style="float: right; padding: 5px 10px; margin-top: -5px;">Apply</button>
+          </div>
+        <?php endif; ?>
+
+        <?php if (!empty($error_message) && $conn): ?>
+          <div class="message message-error">
+            <?php echo $error_message; ?>
+          </div>
+        <?php endif; ?>
+
+        <div class="stats-cards">
+          <div class="stat-card">
+            <div class="stat-title">Total Orders</div>
+            <div class="stat-value"><?php echo $total_orders; ?></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-title">Pending</div>
+            <div class="stat-value"><?php echo $pending_orders; ?></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-title">Processing</div>
+            <div class="stat-value"><?php echo $processing_orders; ?></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-title">Shipped</div>
+            <div class="stat-value"><?php echo $shipped_orders; ?></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-title">Delivered</div>
+            <div class="stat-value"><?php echo $delivered_orders; ?></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-title">Cancelled</div>
+            <div class="stat-value"><?php echo $cancelled_orders; ?></div>
+          </div>
+        </div>
+
+        <form class="search-form" method="GET" action="order.php">
+          <div class="form-group search-input">
+            <input type="text" name="search" placeholder="Search by order ID, customer name or email" value="<?php echo htmlspecialchars($search ?? ''); ?>">
+          </div>
+          <div class="form-group filter-select">
+            <select name="status">
+              <option value="">All Statuses</option>
+              <option value="pending" <?php echo isset($status) && $status === 'pending' ? 'selected' : ''; ?>>Pending</option>
+              <option value="processing" <?php echo isset($status) && $status === 'processing' ? 'selected' : ''; ?>>Processing</option>
+              <option value="shipped" <?php echo isset($status) && $status === 'shipped' ? 'selected' : ''; ?>>Shipped</option>
+              <option value="delivered" <?php echo isset($status) && $status === 'delivered' ? 'selected' : ''; ?>>Delivered</option>
+              <option value="cancelled" <?php echo isset($status) && $status === 'cancelled' ? 'selected' : ''; ?>>Cancelled</option>
+            </select>
+          </div>
+          <button type="submit" class="button button-primary">Filter</button>
+          <a href="order.php" class="button button-secondary">Reset</a>
+        </form>
+
+        <div class="data-container">
+          <div class="responsive-table">
+            <?php if (!$conn): ?>
+              <div class="empty-state">
+                <h3>Database Connection Issue</h3>
+                <p>We're unable to retrieve orders at this time. Please try again later.</p>
+                <button id="retryConnectionBtn" class="button button-primary" style="margin-top: 15px;">Retry Connection</button>
+              </div>
+            <?php elseif (count($orders) > 0): ?>
+              <table class="orders-table">
+                <thead>
+                  <tr>
+                    <th>Order ID</th>
+                    <th>Customer</th>
+                    <th>Date</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <?php foreach ($orders as $order): ?>
+                    <tr>
+                      <td>#<?php echo htmlspecialchars($order['id']); ?></td>
+                      <td>
+                        <?php echo htmlspecialchars($order['username'] ?? $order['shipping_name'] ?? 'Guest'); ?><br>
+                        <span class="text-muted"><?php echo htmlspecialchars($order['user_email'] ?? ''); ?></span>
+                      </td>
+                      <td><?php echo date('M d, Y', strtotime($order['created_at'])); ?></td>
+                      <td class="price-tag">$<?php echo number_format($order['total'] ?? 0, 2); ?></td>
+                      <td>
+                        <span class="status-badge status-<?php echo strtolower($order['status']); ?>">
+                          <?php echo htmlspecialchars($order['status']); ?>
+                        </span>
+                      </td>
+                      <td>
+                        <button onclick="showEditModal(<?php echo $order['id']; ?>, '<?php echo strtolower($order['status']); ?>')" class="action-button edit-button">Update Status</button>
+                        <a href="view_order.php?id=<?php echo $order['id']; ?>" class="action-button view-button">View Details</a>
+                      </td>
+                    </tr>
+                  <?php endforeach; ?>
+                </tbody>
+              </table>
+            <?php else: ?>
+              <div class="empty-state">
+                <h3>No orders found</h3>
+                <p>There are no orders matching your criteria.</p>
+              </div>
+            <?php endif; ?>
+          </div>
         </div>
       </div>
-
-      <div class="data-container">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Order ID</th>
-              <th>Customer</th>
-              <th>Date</th>
-              <th>Amount</th>
-              <th>Status</th>
-              <th>Items</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>1001</td>
-              <td>John Smith</td>
-              <td>2023-06-01</td>
-              <td>$129.99</td>
-              <td><span class="status-badge status-delivered">Delivered</span></td>
-              <td>3</td>
-              <td>
-                <button class="button button-outline button-sm">View</button>
-                <button class="button button-outline button-sm">Track</button>
-              </td>
-            </tr>
-            <tr>
-              <td>1002</td>
-              <td>Sarah Johnson</td>
-              <td>2023-06-03</td>
-              <td>$75.50</td>
-              <td><span class="status-badge status-processing">Processing</span></td>
-              <td>2</td>
-              <td>
-                <button class="button button-outline button-sm">View</button>
-                <button class="button button-outline button-sm">Track</button>
-              </td>
-            </tr>
-            <tr>
-              <td>1003</td>
-              <td>Mike Lewis</td>
-              <td>2023-06-05</td>
-              <td>$349.00</td>
-              <td><span class="status-badge status-shipped">Shipped</span></td>
-              <td>1</td>
-              <td>
-                <button class="button button-outline button-sm">View</button>
-                <button class="button button-outline button-sm">Track</button>
-              </td>
-            </tr>
-            <tr>
-              <td>1004</td>
-              <td>Emily Parker</td>
-              <td>2023-06-10</td>
-              <td>$42.99</td>
-              <td><span class="status-badge status-cancelled">Cancelled</span></td>
-              <td>1</td>
-              <td>
-                <button class="button button-outline button-sm">View</button>
-                <button class="button button-outline button-sm">Track</button>
-              </td>
-            </tr>
-            <tr>
-              <td>1005</td>
-              <td>Pabs Deargan</td>
-              <td>2023-06-12</td>
-              <td>$250.00</td>
-              <td><span class="status-badge status-delivered">Delivered</span></td>
-              <td>4</td>
-              <td>
-                <button class="button button-outline button-sm">View</button>
-                <button class="button button-outline button-sm">Track</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </main>
+    </div>
   </div>
+
+  <!-- Update Status Modal -->
+  <div id="updateStatusModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Update Order Status</h2>
+        <button type="button" class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <form id="updateStatusForm" method="POST">
+        <input type="hidden" id="orderIdInput" name="order_id" value="">
+        <div class="form-group">
+          <label for="status">New Status:</label>
+          <select id="statusInput" name="status" class="form-control">
+            <option value="pending">Pending</option>
+            <option value="processing">Processing</option>
+            <option value="shipped">Shipped</option>
+            <option value="delivered">Delivered</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div class="button-container">
+          <button type="button" class="button button-secondary" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="button button-primary">Update Status</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <p>Processing...</p>
+  </div>
+
+  <script>
+    // Toggle sidebar
+    document.querySelector('.header .toggle-menu').addEventListener('click', function() {
+      document.querySelector('.sidebar').classList.toggle('show');
+    });
+
+    // Check screen size and add appropriate class to sidebar
+    function checkScreenSize() {
+      if (window.innerWidth <= 768) {
+        document.querySelector('.sidebar').classList.remove('show');
+      } else {
+        document.querySelector('.sidebar').classList.add('show');
+      }
+    }
+
+    // Run on page load
+    window.addEventListener('load', checkScreenSize);
+
+    // Run when window is resized
+    window.addEventListener('resize', checkScreenSize);
+
+    // Modal functionality
+    function showEditModal(orderId, currentStatus) {
+      document.getElementById('orderIdInput').value = orderId;
+      document.getElementById('statusInput').value = currentStatus;
+      document.getElementById('updateStatusModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+      document.getElementById('updateStatusModal').style.display = 'none';
+    }
+
+    // Close modal when clicking outside of it
+    window.onclick = function(event) {
+      var modal = document.getElementById('updateStatusModal');
+      if (event.target == modal) {
+        closeModal();
+      }
+    }
+
+    // Add apply button functionality
+    document.addEventListener('DOMContentLoaded', function() {
+      var successMessage = document.querySelector('.message-success');
+      var applyBtn = document.getElementById('applyChangesBtn');
+
+      if (successMessage) {
+        // Only auto-hide if apply button isn't clicked
+        let shouldAutoHide = true;
+
+        if (applyBtn) {
+          applyBtn.addEventListener('click', function() {
+            shouldAutoHide = false;
+            successMessage.style.opacity = '0';
+            setTimeout(function() {
+              successMessage.style.display = 'none';
+              window.location.reload();
+            }, 500);
+          });
+        }
+
+        // Auto-hide after 3 seconds if apply button isn't clicked
+        setTimeout(function() {
+          if (shouldAutoHide) {
+            successMessage.style.opacity = '0';
+            setTimeout(function() {
+              successMessage.style.display = 'none';
+            }, 500);
+          }
+        }, 3000);
+      }
+
+      // Add retry connection button functionality
+      var retryBtn = document.getElementById('retryConnectionBtn');
+      if (retryBtn) {
+        retryBtn.addEventListener('click', function() {
+          window.location.reload();
+        });
+      }
+    });
+
+    // Show loading overlay on form submit
+    document.getElementById('updateStatusForm').addEventListener('submit', function() {
+      document.getElementById('loadingOverlay').style.display = 'flex';
+    });
+  </script>
 </body>
 </html>

@@ -2,73 +2,57 @@
 session_start();
 require 'db_connection.php';
 
+// Check if the user is logged in
+if(!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true) {
+    header("location: login.php");
+    exit;
+}
+
 // Initialize variables
-$emailError = $passwordError = "";
-$email = $password = "";
+$newPasswordError = $confirmPasswordError = $successMessage = "";
+$newPassword = $confirmPassword = "";
 
 // Process the form when submitted
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Validate email
-    if (empty(trim($_POST["email"]))) {
-        $emailError = "Please enter your email.";
+    // Validate new password
+    if (empty(trim($_POST["new_password"]))) {
+        $newPasswordError = "Please enter your new password.";
+    } elseif (strlen(trim($_POST["new_password"])) < 6) {
+        $newPasswordError = "Password must be at least 6 characters.";
     } else {
-        $email = trim($_POST["email"]);
+        $newPassword = trim($_POST["new_password"]);
     }
 
-    // Validate password
-    if (empty(trim($_POST["password"]))) {
-        $passwordError = "Please enter your password.";
+    // Validate confirm password
+    if (empty(trim($_POST["confirm_password"]))) {
+        $confirmPasswordError = "Please confirm your password.";
     } else {
-        $password = trim($_POST["password"]);
+        $confirmPassword = trim($_POST["confirm_password"]);
+        if (empty($newPasswordError) && ($newPassword !== $confirmPassword)) {
+            $confirmPasswordError = "Passwords do not match.";
+        }
     }
 
     // Check if there are no errors
-    if (empty($emailError) && empty($passwordError)) {
-        // Prepare a select statement (added profile_picture and password_change_required)
-        $sql = "SELECT id, username, password, profile_picture, role, password_change_required FROM users WHERE email = ?";
-if ($stmt = mysqli_prepare($conn, $sql)) {
-    mysqli_stmt_bind_param($stmt, "s", $email);
-    if (mysqli_stmt_execute($stmt)) {
-        mysqli_stmt_store_result($stmt);
-        if (mysqli_stmt_num_rows($stmt) == 1) {
-            // Bind results
-            mysqli_stmt_bind_result($stmt, $id, $username, $hashedPassword, $profile_picture, $role, $password_change_required);
-            if (mysqli_stmt_fetch($stmt)) {
-                if (password_verify($password, $hashedPassword)) {
-                    // Password is correct, start a new session
-                    session_start();
-                    $_SESSION["loggedin"] = true;
-                    $_SESSION["id"] = $id;
-                    $_SESSION["username"] = $username;
-                    $_SESSION["profile_picture"] = $profile_picture;
-                    $_SESSION["role"] = $role; // Store the role in the session
+    if (empty($newPasswordError) && empty($confirmPasswordError)) {
+        // Prepare an update statement
+        $sql = "UPDATE users SET password = ?, password_change_required = 0 WHERE id = ?";
+        if ($stmt = mysqli_prepare($conn, $sql)) {
+            // Hash the password
+            $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+            mysqli_stmt_bind_param($stmt, "si", $hashedPassword, $_SESSION["id"]);
+            if (mysqli_stmt_execute($stmt)) {
+                $successMessage = "Password has been changed successfully.";
+                // Update the session to remove the password change flag
+                $_SESSION["password_change_required"] = false;
 
-                    // Check if password change is required
-                    if ($password_change_required) {
-                        $_SESSION["password_change_required"] = true;
-                        header("location: change_password.php");
-                        exit;
-                    }
-
-                    // Redirect based on role
-                    if ($role === 'admin') {
-                        header("location: admin/index.php");
-                    } else {
-                        header("location: index.php");
-                    }
-                    exit;
-                } else {
-                    $passwordError = "The password you entered was not valid.";
-                }
+                // Redirect to the appropriate page after a short delay
+                header("refresh:2;url=" . ($_SESSION["role"] === 'admin' ? 'admin/index.php' : 'index.php'));
+            } else {
+                echo "Oops! Something went wrong. Please try again later.";
             }
-        } else {
-            $emailError = "No account found with that email.";
+            mysqli_stmt_close($stmt);
         }
-    } else {
-        echo "Oops! Something went wrong. Please try again later.";
-    }
-    mysqli_stmt_close($stmt);
-}
     }
 }
 ?>
@@ -78,12 +62,36 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ArtiSell - Cebu Artisan Marketplace</title>
+    <title>Change Password - ArtiSell</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="css/login.css">
+    <style>
+        .success-message {
+            color: #28a745;
+            font-weight: 500;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: rgba(40, 167, 69, 0.1);
+            border-radius: 4px;
+            text-align: center;
+        }
+        .password-requirements {
+            margin-top: 5px;
+            font-size: 12px;
+            color: #6c757d;
+        }
+        .required-notice {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: rgba(255, 193, 7, 0.1);
+            border-radius: 4px;
+            text-align: center;
+            color: #856404;
+        }
+    </style>
 </head>
 <body>
     <div class="page-container">
@@ -94,62 +102,61 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
                 <a href="index.php" class="nav-link">Home</a>
                 <a href="categories.php" class="nav-link">Categories</a>
                 <a href="about.php" class="nav-link">About</a>
-                <a href="signup.php" class="nav-link">Register</a>
+                <?php if(!isset($_SESSION["loggedin"]) || $_SESSION["loggedin"] !== true): ?>
+                    <a href="login.php" class="nav-link">Login</a>
+                    <a href="signup.php" class="nav-link">Register</a>
+                <?php else: ?>
+                    <a href="logout.php" class="nav-link">Logout</a>
+                <?php endif; ?>
             </nav>
         </header>
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Right Column - Login Form -->
+            <!-- Change Password Form -->
             <div class="form-column">
                 <div class="login-form">
-                    <h2 class="form-title">Welcome to ARTISELL</h2>
-                    <p>Sign in to your ArtSell account</p>
+                    <h2 class="form-title">Change Your Password</h2>
+
+                    <?php if(isset($_SESSION["password_change_required"]) && $_SESSION["password_change_required"]): ?>
+                        <div class="required-notice">
+                            <strong>Security Notice:</strong> You must change your password before continuing.
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if(!empty($successMessage)): ?>
+                        <div class="success-message"><?php echo $successMessage; ?></div>
+                    <?php else: ?>
+                        <p>Create a new secure password for your account</p>
+                    <?php endif; ?>
 
                     <form action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]);?>" method="POST">
                         <div class="form-group">
-                            <label for="email" class="form-label">Email</label>
-                            <input id="email" name="email" type="email" class="form-input" placeholder="you@email.com" required>
-                            <span class="error"><?php echo $emailError; ?></span>
+                            <label for="new_password" class="form-label">New Password</label>
+                            <div class="password-input">
+                                <input id="new_password" name="new_password" type="password" class="form-input" placeholder="••••••••" required>
+                                <button type="button" class="show-password"></button>
+                            </div>
+                            <div class="password-requirements">Must be at least 6 characters long</div>
+                            <span class="error"><?php echo $newPasswordError; ?></span>
                         </div>
 
                         <div class="form-group">
-                            <div class="password-group">
-                                <label for="password" class="form-label">Password</label>
-                                <a href="#" class="forgot-password">Forgot Password?</a>
-                            </div>
+                            <label for="confirm_password" class="form-label">Confirm New Password</label>
                             <div class="password-input">
-                                <input id="password" name="password" type="password" class="form-input" placeholder="••••••••" required>
+                                <input id="confirm_password" name="confirm_password" type="password" class="form-input" placeholder="••••••••" required>
                                 <button type="button" class="show-password"></button>
                             </div>
-                            <span class="error"><?php echo $passwordError; ?></span>
+                            <span class="error"><?php echo $confirmPasswordError; ?></span>
                         </div>
 
-                        <button type="submit" class="submit-button">Sign In</button>
+                        <button type="submit" class="submit-button">Change Password</button>
                     </form>
-
-                    <div class="separator">
-                        <div class="separator-line"></div>
-                        <span class="separator-text">Or continue with</span>
-                        <div class="separator-line"></div>
-                    </div>
-
-                    <div class="social-login">
-                        <button class="social-button facebook"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-facebook" viewBox="0 0 16 16">
-  <path d="M16 8.049c0-4.446-3.582-8.05-8-8.05C3.58 0-.002 3.603-.002 8.05c0 4.017 2.926 7.347 6.75 7.951v-5.625h-2.03V8.05H6.75V6.275c0-2.017 1.195-3.131 3.022-3.131.876 0 1.791.157 1.791.157v1.98h-1.009c-.993 0-1.303.621-1.303 1.258v1.51h2.218l-.354 2.326H9.25V16c3.824-.604 6.75-3.934 6.75-7.951"/>
-</svg></button>
-                        <button class="social-button google"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-google" viewBox="0 0 16 16">
-  <path d="M15.545 6.558a9.4 9.4 0 0 1 .139 1.626c0 2.434-.87 4.492-2.384 5.885h.002C11.978 15.292 10.158 16 8 16A8 8 0 1 1 8 0a7.7 7.7 0 0 1 5.352 2.082l-2.284 2.284A4.35 4.35 0 0 0 8 3.166c-2.087 0-3.86 1.408-4.492 3.304a4.8 4.8 0 0 0 0 3.063h.003c.635 1.893 2.405 3.301 4.492 3.301 1.078 0 2.004-.276 2.722-.764h-.003a3.7 3.7 0 0 0 1.599-2.431H8v-3.08z"/>
-</svg></button>
-                        <button class="social-button twitter"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-twitter" viewBox="0 0 16 16">
-  <path d="M5.026 15c6.038 0 9.341-5.003 9.341-9.334q.002-.211-.006-.422A6.7 6.7 0 0 0 16 3.542a6.7 6.7 0 0 1-1.889.518 3.3 3.3 0 0 0 1.447-1.817 6.5 6.5 0 0 1-2.087.793A3.286 3.286 0 0 0 7.875 6.03a9.32 9.32 0 0 1-6.767-3.429 3.29 3.29 0 0 0 1.018 4.382A3.3 3.3 0 0 1 .64 6.575v.045a3.29 3.29 0 0 0 2.632 3.218 3.2 3.2 0 0 1-.865.115 3 3 0 0 1-.614-.057 3.28 3.28 0 0 0 3.067 2.277A6.6 6.6 0 0 1 .78 13.58a6 6 0 0 1-.78-.045A9.34 9.34 0 0 0 5.026 15"/>
-</svg></button>
-                    </div>
                 </div>
             </div>
         </main>
 
-        <!-- Footer (from first code) -->
+        <!-- Footer -->
         <footer>
             <div class="footer-container">
                 <div class="footer-section">
@@ -171,11 +178,11 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
                 <div class="footer-links">
                     <h4>Quick Links</h4>
                     <ul>
-                        <li><a href="#">Home</a></li>
-                        <li><a href="#">Products</a></li>
-                        <li><a href="#">Cities</a></li>
-                        <li><a href="#">About Us</a></li>
-                        <li><a href="#">Contact</a></li>
+                        <li><a href="index.php">Home</a></li>
+                        <li><a href="categories.php">Products</a></li>
+                        <li><a href="cities.php">Cities</a></li>
+                        <li><a href="about.php">About Us</a></li>
+                        <li><a href="contact.php">Contact</a></li>
                     </ul>
                 </div>
 
@@ -210,13 +217,19 @@ if ($stmt = mysqli_prepare($conn, $sql)) {
         </footer>
     </div>
 
-    <!-- JavaScript for password visibility toggle -->
     <script>
-        document.querySelector('.show-password').addEventListener('click', function () {
-            const passwordInput = document.querySelector('#password');
-            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
-            passwordInput.setAttribute('type', type);
-            // Optionally toggle the eye icon here if you have different icons for show/hide
+        // Toggle password visibility
+        document.querySelectorAll('.show-password').forEach(button => {
+            button.addEventListener('click', function() {
+                const input = this.previousElementSibling;
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    this.classList.add('active');
+                } else {
+                    input.type = 'password';
+                    this.classList.remove('active');
+                }
+            });
         });
     </script>
 </body>

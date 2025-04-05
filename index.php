@@ -65,6 +65,9 @@ session_start(); // Start the session to access session variables
                 <a href="shop.php" class="nav-link">Products</a>
                 <a href="about.php" class="nav-link">Cities</a>
                 <a href="about.php" class="nav-link">About</a>
+                <?php if (isset($_SESSION["loggedin"]) && $_SESSION["loggedin"] === true): ?>
+                <a href="admin/index.php" class="nav-link">Admin</a>
+                <?php endif; ?>
             </div>
         </nav>
         <div class="header-right">
